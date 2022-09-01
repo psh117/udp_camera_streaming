@@ -7,8 +7,8 @@ import struct
 import math, time
 from multiprocessing import Process
 
-# ADDR = '192.168.1.51'
-ADDR = '192.168.1.40'
+ADDR = '192.168.1.51'
+# ADDR = '192.168.1.40'
 WIDTH = 1280
 HEIGHT = 720
 FPS = 120

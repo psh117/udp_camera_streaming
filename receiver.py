@@ -48,7 +48,10 @@ def run_viewer(video_id):
         else:
             dat += seg[1:]
             img = cv2.imdecode(np.fromstring(dat, dtype=np.uint8), 1)
-            cv2.imshow('frame', img)
+            try:
+                cv2.imshow('frame', img)
+            except:
+                print(f'[{video_id}] packet error.')
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
             dat = b''
