@@ -6,8 +6,9 @@ import socket
 import struct
 import time
 from multiprocessing import Process
+from turbojpeg import TurboJPEG
 
-ADDR = '192.168.1.40'
+ADDR = '192.168.1.51'
 MAX_DGRAM = 2**16
 
 def dump_buffer(s):
@@ -30,6 +31,7 @@ def run_viewer(video_id):
     befo_time = time.time()
     dts = np.zeros(60)
     idx = 0
+    turbo_jpeg = TurboJPEG()
 
     while True:
         dt = time.time() - befo_time
@@ -47,7 +49,8 @@ def run_viewer(video_id):
             dat += seg[1:]
         else:
             dat += seg[1:]
-            img = cv2.imdecode(np.fromstring(dat, dtype=np.uint8), 1)
+            # img = cv2.imdecode(np.fromstring(dat, dtype=np.uint8), 1)
+            img = turbo_jpeg.decode(np.fromstring(dat, dtype=np.uint8))
             try:
                 cv2.imshow('frame', img)
             except:
