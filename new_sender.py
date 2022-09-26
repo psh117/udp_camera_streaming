@@ -7,9 +7,11 @@ import struct
 import math, time
 from multiprocessing import Process
 
+from v4l2py import Device
 from turbojpeg import TurboJPEG
+import time
 
-# ADDR = '192.168.0.14'
+#ADDR = '192.168.0.14'
 ADDR = '192.168.0.33'
 # ADDR = '192.168.1.40'
 # WIDTH = 1280
@@ -18,7 +20,7 @@ ADDR = '192.168.0.33'
 WIDTH = 1920
 HEIGHT = 1200
 FPS = 60
-QUALITY = 60
+QUALITY = 40
 
 class BenchmarkTimer():
     def __init__(self, max_len = 60, prefix='') -> None:
@@ -66,7 +68,11 @@ class FrameSegment(object):
         into data segments 
         """
         self.b.start()
-        compress_img1 = self.turbo_jpeg.encode(img1,QUALITY)
+        try:
+            compress_img1 = self.turbo_jpeg.scale_with_quality(img1,quality=QUALITY)
+        except:
+            print('error')
+            return
         #compress_img1 = cv2.imencode('.jpg', img1, [int(cv2.IMWRITE_JPEG_QUALITY), QUALITY])[1].tostring() 
         # compress_img1 = cv2.imencode('.jpg', img1, [int(cv2.IMWRITE_JPEG_QUALITY), QUALITY])[1].tostring() 
         self.b.check()
@@ -103,20 +109,24 @@ def run_sending(video_id = 0):
     print (f'[{video_id}] open port with {port}')
     fs = FrameSegment(s, port)
 
-    cap = cv2.VideoCapture(video_id, cv2.CAP_ANY, 
-                            [cv2.CAP_PROP_FRAME_WIDTH, 
-                             WIDTH, 
-                             cv2.CAP_PROP_FRAME_HEIGHT, 
-                             HEIGHT, 
-                             cv2.CAP_PROP_FPS,
-                             FPS, 
-                             cv2.CAP_PROP_FOURCC,
-                             cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')])
+    # cap = cv2.VideoCapture(video_id, cv2.CAP_ANY, 
+    #                         [cv2.CAP_PROP_FRAME_WIDTH, 
+    #                          WIDTH, 
+    #                          cv2.CAP_PROP_FRAME_HEIGHT, 
+    #                          HEIGHT, 
+    #                          cv2.CAP_PROP_FPS,
+    #                          FPS, 
+    #                          cv2.CAP_PROP_FOURCC,
+    #                          cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')])
                             #  cv2.VideoWriter_fourcc('U', 'Y', 'V', 'Y')])
+                            
+    cam = Device.from_id(video_id)
     befo_time = time.time()
     dts = np.zeros(60)
     idx = 0
-    while (cap.isOpened()):
+    # while (cap.isOpened()):
+    
+    for i, frame in enumerate(cam):
         dt = time.time() - befo_time
         dts[idx] = dt
         idx += 1
@@ -126,10 +136,6 @@ def run_sending(video_id = 0):
             print(f'[{video_id}] frame rate:', 1/dts.mean())
 
         befo_time = time.time()
-        try:
-            _, frame = cap.read()
-        except:
-            continue
         fs.udp_frame(frame)
     cap.release()
     cv2.destroyAllWindows()
@@ -139,12 +145,8 @@ def run_sending(video_id = 0):
 def main():
     p1 = Process(target=run_sending, args=(0,))
     p2 = Process(target=run_sending, args=(2,))
-    #p3 = Process(target=run_sending, args=(4,))
-    #p4 = Process(target=run_sending, args=(6,))
     p1.start()
     p2.start()
-    #p3.start()
-    #p4.start()	
 
     try:
         while True:
@@ -154,8 +156,7 @@ def main():
         shutdown = True
         p1.terminate()
         p2.terminate()
-        #p3.terminate()
-        #p4.terminate()    
+        
     p1.join()
     p2.join()
 
