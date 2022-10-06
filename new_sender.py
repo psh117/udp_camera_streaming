@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import cv2
 import numpy as np
 import socket
 import struct
@@ -11,6 +10,8 @@ from v4l2py import Device
 from turbojpeg import TurboJPEG
 import time
 
+from nvjpeg import NvJpeg
+
 #ADDR = '192.168.0.14'
 ADDR = '192.168.0.33'
 # ADDR = '192.168.1.40'
@@ -19,7 +20,7 @@ ADDR = '192.168.0.33'
 # FPS = 120
 WIDTH = 1920
 HEIGHT = 1200
-FPS = 60
+FPS = 114
 QUALITY = 40
 
 class BenchmarkTimer():
@@ -37,7 +38,7 @@ class BenchmarkTimer():
             self.idx = 0
             self.print()
     def print(self):
-        print(f'[{self.prefix}] dts (ms):', self.dts.mean() * 1000)
+        print(f'[{self.prefix}] d1ts (ms):', self.dts.mean() * 1000)
 
         pass
 
@@ -59,23 +60,61 @@ class FrameSegment(object):
         self.s = sock
         self.port = port
         self.addr = addr
-        self.b = BenchmarkTimer(prefix=f'{port}')
+        self.a = BenchmarkTimer(prefix='1')
+        self.b = BenchmarkTimer(prefix='2')
+        self.c = BenchmarkTimer(prefix='3')
         self.turbo_jpeg = TurboJPEG()
+
+        self.first = True
+        # self.compress_img1
+        self.nj = NvJpeg()
 
     def udp_frame(self, img1):
         """ 
         Compress image and Break down
         into data segments 
         """
-        self.b.start()
         try:
-            compress_img1 = self.turbo_jpeg.scale_with_quality(img1,quality=QUALITY)
+            # com1 = 
+            # if not self.first:
+            self.a.start()
+            # compress_img1 = self.turbo_jpeg.scale_with_quality(img1,quality=QUALITY)
+            com1 = self.nj.decode(img1)
+            #com1 = self.turbo_jpeg.decode(img1)
+            self.a.check()
+
+            self.b.start()
+            compress_img1 = self.nj.encode(com1,40)
+            #compress_img1 = self.turbo_jpeg.encode(com1,40)
+            self.b.check()
+
+            # self.c.start()
+            # temp= self.nj.decode(compress_img1)
+
+            # # temp=self.turbo_jpeg.decode(compress_img1)
+            # #compress_img1 = self.turbo_jpeg.encode(com1,40)
+            # self.c.check()
+                # self.first = false
+
+            self.first = False
+
+            # self.a.start()
+            # com1 = self.turbo_jpeg.decode(img1)
+            # self.a.check()
+
+            # self.b.start()
+            # compress_img1 = self.turbo_jpeg.encode(com1, QUALITY)
+            # self.b.check()
+
+            # cv2.imdecode 
+            # cv2.imencode
+
         except:
             print('error')
             return
         #compress_img1 = cv2.imencode('.jpg', img1, [int(cv2.IMWRITE_JPEG_QUALITY), QUALITY])[1].tostring() 
         # compress_img1 = cv2.imencode('.jpg', img1, [int(cv2.IMWRITE_JPEG_QUALITY), QUALITY])[1].tostring() 
-        self.b.check()
+
         # fdsa
         dat = compress_img1
         size = len(dat)
@@ -103,6 +142,7 @@ class FrameSegment(object):
             count -= 1
 
 
+
 def run_sending(video_id = 0):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     port = 41117 + video_id
@@ -121,6 +161,26 @@ def run_sending(video_id = 0):
                             #  cv2.VideoWriter_fourcc('U', 'Y', 'V', 'Y')])
                             
     cam = Device.from_id(video_id)
+    def find_see3cam():
+        for i in range(10):
+            try:
+                cam_test = Device.from_id(i)
+                if cam_test.info.card == 'See3CAM_24CUG' and cam_test.info.capabilities == 69206017:
+                    print(f'Found See3CAM_24CUG at /dev/video{i}')
+            except:
+                pass
+
+    print (cam.info.card)
+    if cam.info.card != 'See3CAM_24CUG' or cam.info.capabilities != 69206017:
+        find_see3cam()
+        return
+        
+    cam.video_capture.set_format(WIDTH, HEIGHT, 'MJPG')
+
+    print(cam.info.card)
+    print(cam.info.capabilities)
+    print(cam.info.formats)
+    print(cam.video_capture.get_format())
     befo_time = time.time()
     dts = np.zeros(60)
     idx = 0
@@ -131,20 +191,19 @@ def run_sending(video_id = 0):
         dts[idx] = dt
         idx += 1
 
-        if idx == 60:
+        if idx == 60:   
             idx = 0
             print(f'[{video_id}] frame rate:', 1/dts.mean())
 
         befo_time = time.time()
         fs.udp_frame(frame)
-    cap.release()
-    cv2.destroyAllWindows()
     s.close()
     pass
 
 def main():
-    p1 = Process(target=run_sending, args=(0,))
-    p2 = Process(target=run_sending, args=(2,))
+    p1 = Process(target=run_sending, args=(1,))
+    p2 = Process(target=run_sending, args=(6,)) 
+    # p2 = Process(target=run_sending, args=(2,))
     p1.start()
     p2.start()
 
