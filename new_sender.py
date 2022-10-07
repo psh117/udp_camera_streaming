@@ -5,6 +5,7 @@ import socket
 import struct
 import math, time
 from multiprocessing import Process
+import subprocess
 
 from v4l2py import Device
 from turbojpeg import TurboJPEG
@@ -38,7 +39,7 @@ class BenchmarkTimer():
             self.idx = 0
             self.print()
     def print(self):
-        print(f'[{self.prefix}] d1ts (ms):', self.dts.mean() * 1000)
+        print(f'[{self.prefix}] dts (ms):', self.dts.mean() * 1000)
 
         pass
 
@@ -141,50 +142,48 @@ class FrameSegment(object):
             array_pos_start = array_pos_end
             count -= 1
 
+def run_sending(cam_serial = None):
+    """
+    41107 : left -- 1E328E0B
+    41109 : right -- 322F8B0B
+    
+    /bin/udevadm info --name=/dev/video2 | grep SERIAL_SHORT | cut -d '=' -f2
+    """
+    cam_serial_to_port = {'1E328E0B':41107,'322F8B0B':41109}
+    cam_serial_to_name = {'1E328E0B':'LEFT ','322F8B0B':'RIGHT'}
 
+    find_serial = False
 
-def run_sending(video_id = 0):
+    for i in range(50):
+        try:
+            cam_test = Device.from_id(i)
+            if cam_test.info.card == 'See3CAM_24CUG' and cam_test.info.capabilities == 69206017:
+                print(f'Found See3CAM_24CUG at /dev/video{i}')
+
+                find_serial_cmd = f"/bin/udevadm info --name=/dev/video{i} | grep SERIAL_SHORT | cut -d '=' -f2"
+                serial_out = result = subprocess.check_output(find_serial_cmd, shell=True, text=True)[:-1]
+                if serial_out == cam_serial:
+                    port = cam_serial_to_port[serial_out]
+                    print(f'Found that video{i} -- {cam_serial}')
+                    cam = cam_test
+                    find_serial = True
+                    break
+        except:
+            pass
+
+    if find_serial is False:
+        print('no matching camera serial. check the codes.')
+        return
+
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    port = 41117 + video_id
-    print (f'[{video_id}] open port with {port}')
+
+    print (f'[{port}] open port for {cam_serial_to_name[cam_serial]}')
     fs = FrameSegment(s, port)
 
-    # cap = cv2.VideoCapture(video_id, cv2.CAP_ANY, 
-    #                         [cv2.CAP_PROP_FRAME_WIDTH, 
-    #                          WIDTH, 
-    #                          cv2.CAP_PROP_FRAME_HEIGHT, 
-    #                          HEIGHT, 
-    #                          cv2.CAP_PROP_FPS,
-    #                          FPS, 
-    #                          cv2.CAP_PROP_FOURCC,
-    #                          cv2.VideoWriter_fourcc('M', 'J', 'P', 'G')])
-                            #  cv2.VideoWriter_fourcc('U', 'Y', 'V', 'Y')])
-                            
-    cam = Device.from_id(video_id)
-    def find_see3cam():
-        for i in range(10):
-            try:
-                cam_test = Device.from_id(i)
-                if cam_test.info.card == 'See3CAM_24CUG' and cam_test.info.capabilities == 69206017:
-                    print(f'Found See3CAM_24CUG at /dev/video{i}')
-            except:
-                pass
-
-    print (cam.info.card)
-    if cam.info.card != 'See3CAM_24CUG' or cam.info.capabilities != 69206017:
-        find_see3cam()
-        return
-        
     cam.video_capture.set_format(WIDTH, HEIGHT, 'MJPG')
-
-    print(cam.info.card)
-    print(cam.info.capabilities)
-    print(cam.info.formats)
-    print(cam.video_capture.get_format())
     befo_time = time.time()
     dts = np.zeros(60)
     idx = 0
-    # while (cap.isOpened()):
     
     for i, frame in enumerate(cam):
         dt = time.time() - befo_time
@@ -193,7 +192,7 @@ def run_sending(video_id = 0):
 
         if idx == 60:   
             idx = 0
-            print(f'[{video_id}] frame rate:', 1/dts.mean())
+            print(f'[{port}] frame rate:', 1/dts.mean())
 
         befo_time = time.time()
         fs.udp_frame(frame)
@@ -201,9 +200,8 @@ def run_sending(video_id = 0):
     pass
 
 def main():
-    p1 = Process(target=run_sending, args=(1,))
-    p2 = Process(target=run_sending, args=(6,)) 
-    # p2 = Process(target=run_sending, args=(2,))
+    p1 = Process(target=run_sending, args=('1E328E0B',))
+    p2 = Process(target=run_sending, args=('322F8B0B',)) 
     p1.start()
     p2.start()
 
